@@ -1,0 +1,572 @@
+#!/usr/bin/env python3
+"""
+QR Code Generator - Linux Terminal
+15 Features, Full Menu
+
+Created & Maintained by JRD Group Of Companies
+Shaping What's Next
+"""
+
+import qrcode
+import sys
+import os
+import json
+import datetime
+
+try:
+    from PIL import Image
+    PILLOW_OK = True
+except ImportError:
+    PILLOW_OK = False
+
+# ── ANSI Colors ───────────────────────────────────────────────────
+GREEN   = "\033[92m"
+CYAN    = "\033[96m"
+YELLOW  = "\033[93m"
+RED     = "\033[91m"
+MAGENTA = "\033[95m"
+BLUE    = "\033[94m"
+BOLD    = "\033[1m"
+DIM     = "\033[2m"
+RESET   = "\033[0m"
+
+# Extras for footer
+INDIGO  = "\033[38;2;79;70;229m"
+TEAL    = "\033[38;2;0;212;255m"
+LGRAY   = "\033[38;2;107;122;159m"
+
+HISTORY_FILE = os.path.expanduser("~/.qr_history.json")
+
+# ═════════════════════════════════════════════════════════════════
+#  HELPERS
+# ═════════════════════════════════════════════════════════════════
+
+def clear():
+    os.system("clear")
+
+def banner():
+    print(f"""
+{TEAL}{BOLD}╔══════════════════════════════════════════════════════════════╗
+║           QR CODE GENERATOR  –  Linux Terminal               ║
+║                15 Features  |  Python 3                      ║
+╚══════════════════════════════════════════════════════════════╝{RESET}""")
+
+def footer():
+    """JRD Group footer — printed after every operation."""
+    width = 62
+    line  = "─" * width
+    print(f"\n{LGRAY}{DIM}{line}{RESET}")
+    print(f"{LGRAY}{DIM}  Created & Maintained by{RESET}  "
+          f"{TEAL}{BOLD}JRD Group Of Companies{RESET}")
+    # Slogan with split highlight
+    slogan_left  = "Shaping"
+    slogan_right = " What's Next"
+    print(f"{LGRAY}{DIM}  {' ' * 23}{RESET}"
+          f"{TEAL}{BOLD}{slogan_left}{RESET}"
+          f"{LGRAY}{DIM}{slogan_right}{RESET}")
+    print(f"{LGRAY}{DIM}{line}{RESET}\n")
+
+def section(title):
+    print(f"\n{YELLOW}{BOLD}── {title} {'─' * max(0, 44 - len(title))}{RESET}")
+
+def get_input(prompt, default=None, color=CYAN):
+    if default is not None:
+        val = input(f"{color}{prompt}{RESET} [{BOLD}{default}{RESET}]: ").strip()
+        return val if val else str(default)
+    return input(f"{color}{prompt}{RESET}: ").strip()
+
+def pause():
+    footer()
+    input(f"{DIM}Press Enter to return to menu…{RESET}")
+
+def ec_constant(ec):
+    return {
+        "L": qrcode.constants.ERROR_CORRECT_L,
+        "M": qrcode.constants.ERROR_CORRECT_M,
+        "Q": qrcode.constants.ERROR_CORRECT_Q,
+        "H": qrcode.constants.ERROR_CORRECT_H,
+    }.get(ec.upper(), qrcode.constants.ERROR_CORRECT_M)
+
+def log_history(label, data):
+    history = []
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE) as f:
+                history = json.load(f)
+        except Exception:
+            history = []
+    history.append({
+        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "type": label,
+        "data": data,
+    })
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+def make_qr(data, ec="M", box=10, border=2):
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=ec_constant(ec),
+        box_size=box,
+        border=border,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+    return qr
+
+def display_terminal(qr):
+    print(f"\n{TEAL}{'═' * 56}{RESET}")
+    qr.print_ascii(invert=True)
+    print(f"{TEAL}{'═' * 56}{RESET}\n")
+
+def show_info(qr, data):
+    size = qr.version * 4 + 17
+    print(f"\n{MAGENTA}{'─' * 56}")
+    print(f"  📊 QR Info")
+    print(f"{'─' * 56}{RESET}")
+    print(f"  {YELLOW}Version  :{RESET} {qr.version}")
+    print(f"  {YELLOW}Modules  :{RESET} {size} × {size}")
+    print(f"  {YELLOW}Data len :{RESET} {len(data)} characters")
+    print(f"  {YELLOW}Encoded  :{RESET} {data[:58]}{'…' if len(data) > 58 else ''}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 1 – Text / URL QR
+# ═════════════════════════════════════════════════════════════════
+def mode_text():
+    section("Feature 1 – Text / URL QR Code")
+    while True:
+        data = get_input("Enter text or URL").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    qr = make_qr(data)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("Text/URL", data)
+    print(f"{GREEN}✅ QR code generated successfully!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 2 – Wi-Fi QR
+# ═════════════════════════════════════════════════════════════════
+def mode_wifi():
+    section("Feature 2 – Wi-Fi QR Code")
+    ssid     = get_input("Wi-Fi Name (SSID)")
+    password = get_input("Password (blank if open)", default="")
+    sec      = get_input("Security type (WPA / WEP / nopass)", default="WPA").upper()
+    if sec not in ("WPA", "WEP", "NOPASS"):
+        sec = "WPA"
+    hidden = get_input("Hidden network? (y/n)", default="n").lower() == "y"
+    data   = f"WIFI:T:{sec};S:{ssid};P:{password};H:{'true' if hidden else 'false'};;"
+    qr = make_qr(data, ec="H")
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("Wi-Fi", f"SSID={ssid}")
+    print(f"{GREEN}✅ Scan this QR to connect to Wi-Fi!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 3 – vCard Contact QR
+# ═════════════════════════════════════════════════════════════════
+def mode_vcard():
+    section("Feature 3 – vCard Contact QR Code")
+    name    = get_input("Full Name")
+    phone   = get_input("Phone number")
+    email   = get_input("Email",        default="")
+    org     = get_input("Organization", default="")
+    url     = get_input("Website",      default="")
+    address = get_input("Address",      default="")
+    data = (
+        f"BEGIN:VCARD\nVERSION:3.0\n"
+        f"FN:{name}\nTEL:{phone}\n"
+        f"EMAIL:{email}\nORG:{org}\n"
+        f"URL:{url}\nADR:{address}\n"
+        f"END:VCARD"
+    )
+    qr = make_qr(data, ec="M")
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("vCard", f"Name={name}, Phone={phone}")
+    print(f"{GREEN}✅ Scan to save contact!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 4 – UPI Payment QR
+# ═════════════════════════════════════════════════════════════════
+def mode_upi():
+    section("Feature 4 – UPI Payment QR Code")
+    upi_id = get_input("UPI ID (e.g. name@upi)")
+    name   = get_input("Payee Name")
+    amount = get_input("Amount (blank = any amount)", default="")
+    note   = get_input("Payment note", default="Payment")
+    data   = f"upi://pay?pa={upi_id}&pn={name}&tn={note}&cu=INR"
+    if amount:
+        data += f"&am={amount}"
+    qr = make_qr(data, ec="M")
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("UPI", f"UPI={upi_id}, Amount={amount}")
+    print(f"{GREEN}✅ Scan to pay via PhonePe / GPay / Paytm!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 5 – SMS QR
+# ═════════════════════════════════════════════════════════════════
+def mode_sms():
+    section("Feature 5 – SMS QR Code")
+    number  = get_input("Phone number (e.g. +919876543210)")
+    message = get_input("Message", default="")
+    data    = f"sms:{number}?body={message}"
+    qr = make_qr(data)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("SMS", f"To={number}")
+    print(f"{GREEN}✅ Scan to open SMS app with pre-filled message!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 6 – Email QR
+# ═════════════════════════════════════════════════════════════════
+def mode_email():
+    section("Feature 6 – Email QR Code")
+    to      = get_input("To email address")
+    subject = get_input("Subject", default="")
+    body    = get_input("Body",    default="")
+    data    = f"mailto:{to}?subject={subject}&body={body}"
+    qr = make_qr(data)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("Email", f"To={to}")
+    print(f"{GREEN}✅ Scan to open email app!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 7 – Custom Color PNG
+# ═════════════════════════════════════════════════════════════════
+def mode_custom_color():
+    section("Feature 7 – Custom Color QR (saves as PNG)")
+    if not PILLOW_OK:
+        print(f"{RED}Pillow not installed. Run: pip install pillow --break-system-packages{RESET}")
+        return
+    while True:
+        data = get_input("Enter text or URL").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    print(f"\n{DIM}Tip: use color names (red, blue) or hex (#FF5733){RESET}")
+    fg       = get_input("Foreground color (QR dots)", default="black")
+    bg       = get_input("Background color",           default="white")
+    filename = get_input("Save filename",              default="colored_qr.png")
+    if not filename.endswith(".png"):
+        filename += ".png"
+    qr = make_qr(data, ec="M")
+    try:
+        img = qr.make_image(fill_color=fg, back_color=bg)
+        img.save(filename)
+        show_info(qr, data)
+        display_terminal(qr)
+        log_history("Custom Color", data)
+        print(f"{GREEN}✅ Saved colored PNG → {os.path.abspath(filename)}{RESET}")
+    except Exception as e:
+        print(f"{RED}❌ Color error: {e}\nTry valid names like 'red', 'navy', '#FF0000'{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 8 – Save QR as PNG
+# ═════════════════════════════════════════════════════════════════
+def mode_save_png():
+    section("Feature 8 – Save QR as PNG Image")
+    if not PILLOW_OK:
+        print(f"{RED}Pillow not installed. Run: pip install pillow --break-system-packages{RESET}")
+        return
+    while True:
+        data = get_input("Enter text or URL").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    filename = get_input("Save filename", default="qrcode.png")
+    if not filename.endswith(".png"):
+        filename += ".png"
+    qr = make_qr(data, ec="M")
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save(filename)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("PNG Save", data)
+    print(f"{GREEN}✅ QR saved as PNG → {os.path.abspath(filename)}{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 9 – Batch Mode
+# ═════════════════════════════════════════════════════════════════
+def mode_batch():
+    section("Feature 9 – Batch Mode (Generate from .txt File)")
+    print(f"{DIM}Each line in the file becomes one QR code PNG.{RESET}")
+    filepath = get_input("Path to .txt file")
+    if not os.path.exists(filepath):
+        print(f"{RED}File not found: {filepath}{RESET}")
+        return
+    with open(filepath) as f:
+        lines = [l.strip() for l in f if l.strip()]
+    if not lines:
+        print(f"{RED}File is empty.{RESET}")
+        return
+    out_dir = get_input("Output folder", default="qr_batch_output")
+    os.makedirs(out_dir, exist_ok=True)
+    print(f"\n{CYAN}Generating {len(lines)} QR codes…{RESET}\n")
+    for i, line in enumerate(lines, 1):
+        qr    = make_qr(line)
+        safe  = "".join(c if c.isalnum() else "_" for c in line[:30])
+        fname = os.path.join(out_dir, f"{i:03d}_{safe}.png")
+        if PILLOW_OK:
+            qr.make_image().save(fname)
+            status = f"→ {fname}"
+        else:
+            status = "(Pillow missing, PNG skipped)"
+        log_history("Batch", line)
+        print(f"  {GREEN}[{i}/{len(lines)}]{RESET} {line[:50]}  {DIM}{status}{RESET}")
+    print(f"\n{GREEN}✅ Batch done! Output folder: {os.path.abspath(out_dir)}{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 10 – History Log
+# ═════════════════════════════════════════════════════════════════
+def mode_history():
+    section("Feature 10 – QR Generation History")
+    if not os.path.exists(HISTORY_FILE):
+        print(f"{YELLOW}No history found yet.{RESET}")
+        return
+    with open(HISTORY_FILE) as f:
+        history = json.load(f)
+    if not history:
+        print(f"{YELLOW}History is empty.{RESET}")
+        return
+    print(f"{DIM}Showing last 20 entries  (total saved: {len(history)}){RESET}\n")
+    for entry in history[-20:]:
+        print(f"  {GREEN}{entry['time']}{RESET}  {CYAN}[{entry['type']}]{RESET}  {entry['data'][:55]}")
+    print()
+    if get_input("Clear all history? (y/n)", default="n").lower() == "y":
+        os.remove(HISTORY_FILE)
+        print(f"{GREEN}✅ History cleared.{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 11 – Error Correction Level Picker
+# ═════════════════════════════════════════════════════════════════
+def mode_error_level():
+    section("Feature 11 – Error Correction Level Selector")
+    print(f"""
+  {YELLOW}L{RESET} = Low       ~7%  recovery  – smallest QR size
+  {YELLOW}M{RESET} = Medium   ~15%  recovery  – general use (default)
+  {YELLOW}Q{RESET} = Quartile ~25%  recovery  – printed materials
+  {YELLOW}H{RESET} = High     ~30%  recovery  – logos overlaid on QR
+""")
+    ec = get_input("Choose level (L/M/Q/H)", default="M").upper()
+    if ec not in ("L", "M", "Q", "H"):
+        print(f"{YELLOW}Invalid. Using M.{RESET}")
+        ec = "M"
+    while True:
+        data = get_input("Enter text or URL to encode").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    qr = make_qr(data, ec=ec)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history(f"EC-{ec}", data)
+    print(f"{GREEN}✅ QR generated with Error Correction Level {ec}!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 12 – Custom Size & Border
+# ═════════════════════════════════════════════════════════════════
+def mode_size_border():
+    section("Feature 12 – Custom Size & Border Control")
+    print(f"{DIM}Box size controls how large each dot is (1=tiny, 20=huge)")
+    print(f"Border is the quiet zone around the QR (min recommended: 4){RESET}\n")
+    while True:
+        data = get_input("Enter text or URL").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    box    = get_input("Box size    (1–20)", default="10")
+    border = get_input("Border size (1–10)", default="4")
+    try:
+        box    = max(1, min(20, int(box)))
+        border = max(1, min(10, int(border)))
+    except ValueError:
+        box, border = 10, 4
+    qr = make_qr(data, box=box, border=border)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("Custom Size", data)
+    print(f"{GREEN}✅ QR generated  box={box}  border={border}!{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 13 – QR Info & Details Preview
+# ═════════════════════════════════════════════════════════════════
+def mode_info_preview():
+    section("Feature 13 – QR Info & Details Preview")
+    while True:
+        data = get_input("Enter text or URL").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    for ec_label in ["L", "M", "Q", "H"]:
+        qr   = make_qr(data, ec=ec_label)
+        size = qr.version * 4 + 17
+        cap  = {
+            "L": "High capacity",
+            "M": "Balanced",
+            "Q": "Medium capacity",
+            "H": "Lower capacity, most damage-resistant",
+        }[ec_label]
+        print(f"  {CYAN}Level {ec_label}{RESET}  →  Version {qr.version:>2}  |  {size}×{size} modules  |  {cap}")
+    print()
+    ec = get_input("Choose level to display (L/M/Q/H)", default="M").upper()
+    if ec not in ("L", "M", "Q", "H"):
+        ec = "M"
+    qr = make_qr(data, ec=ec)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("Info Preview", data)
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 14 – Clipboard Copy
+# ═════════════════════════════════════════════════════════════════
+def mode_clipboard():
+    section("Feature 14 – Clipboard Copy")
+    print(f"{DIM}Requires xclip or xsel  →  sudo apt install xclip{RESET}\n")
+    while True:
+        data = get_input("Enter text or URL").strip()
+        if data:
+            break
+        print(f"{RED}Cannot be empty.{RESET}")
+    qr = make_qr(data)
+    show_info(qr, data)
+    display_terminal(qr)
+    log_history("Clipboard", data)
+
+    copied = False
+    for tool, cmd in [
+        ("xclip", f"echo -n '{data}' | xclip -selection clipboard"),
+        ("xsel",  f"echo -n '{data}' | xsel --clipboard --input"),
+    ]:
+        if os.system(f"which {tool} > /dev/null 2>&1") == 0:
+            os.system(cmd)
+            print(f"{GREEN}✅ Copied to clipboard using {tool}!{RESET}")
+            copied = True
+            break
+    if not copied:
+        print(f"{YELLOW}⚠  xclip/xsel not found. Install with:{RESET}")
+        print(f"   sudo apt install xclip")
+        print(f"\n{CYAN}Data to copy manually:{RESET}\n  {data}")
+
+# ═════════════════════════════════════════════════════════════════
+#  FEATURE 15 – About / Help
+# ═════════════════════════════════════════════════════════════════
+def mode_about():
+    section("Feature 15 – About & Help")
+    print(f"""
+  {TEAL}{BOLD}QR Code Generator – Linux Terminal{RESET}
+  Built with Python 3 + qrcode + Pillow
+
+  {YELLOW}All 15 Features:{RESET}
+   1.  Text / URL QR Code
+   2.  Wi-Fi QR Code
+   3.  vCard Contact QR Code
+   4.  UPI Payment QR Code
+   5.  SMS QR Code
+   6.  Email QR Code
+   7.  Custom Color QR (PNG)
+   8.  Save QR as PNG Image
+   9.  Batch Mode (from .txt file)
+   10. History Log (view & clear)
+   11. Error Correction Level Selector
+   12. Custom Size & Border Control
+   13. QR Info & Details Preview
+   14. Clipboard Copy (xclip/xsel)
+   15. About & Help (this screen)
+
+  {YELLOW}Install dependencies:{RESET}
+   pip install qrcode pillow --break-system-packages
+   sudo apt install xclip    ← for clipboard feature
+
+  {YELLOW}History file:{RESET}  ~/.qr_history.json
+  {YELLOW}Ctrl+C{RESET}         → safely returns to menu
+""")
+    # Show footer inside About too
+    w = 56
+    print(f"  {LGRAY}{DIM}{'─' * w}{RESET}")
+    print(f"  {LGRAY}{DIM}Created & Maintained by{RESET}  "
+          f"{TEAL}{BOLD}JRD Group Of Companies{RESET}")
+    print(f"  {LGRAY}{DIM}{'─' * w}{RESET}")
+
+# ═════════════════════════════════════════════════════════════════
+#  MAIN MENU
+# ═════════════════════════════════════════════════════════════════
+
+MENU = [
+    ("1",  "Text / URL QR Code",              "📝", mode_text),
+    ("2",  "Wi-Fi QR Code",                   "📶", mode_wifi),
+    ("3",  "vCard Contact QR Code",           "👤", mode_vcard),
+    ("4",  "UPI Payment QR Code",             "💳", mode_upi),
+    ("5",  "SMS QR Code",                     "💬", mode_sms),
+    ("6",  "Email QR Code",                   "📧", mode_email),
+    ("7",  "Custom Color QR (PNG)",           "🎨", mode_custom_color),
+    ("8",  "Save QR as PNG Image",            "💾", mode_save_png),
+    ("9",  "Batch Mode (from .txt file)",     "📂", mode_batch),
+    ("10", "History Log",                     "🕓", mode_history),
+    ("11", "Error Correction Level Selector", "🛡 ", mode_error_level),
+    ("12", "Custom Size & Border Control",    "📐", mode_size_border),
+    ("13", "QR Info & Details Preview",       "📊", mode_info_preview),
+    ("14", "Clipboard Copy",                  "📋", mode_clipboard),
+    ("15", "About & Help",                    "ℹ️ ", mode_about),
+    ("0",  "Exit",                            "🚪", None),
+]
+
+def print_menu_footer():
+    """Compact footer line shown at the bottom of every menu screen."""
+    print(f"\n  {LGRAY}{DIM}{'─' * 58}{RESET}")
+    print(f"  {LGRAY}{DIM}Created & Maintained by{RESET} "
+          f"{TEAL}{BOLD}JRD Group Of Companies{RESET}"
+          f"  {LGRAY}{DIM}·{RESET}  "
+          f"{TEAL}Shaping{RESET}{LGRAY}{DIM} What's Next{RESET}")
+    print(f"  {LGRAY}{DIM}{'─' * 58}{RESET}\n")
+
+def main_menu():
+    while True:
+        clear()
+        banner()
+        print(f"\n{BOLD}  {'#':<4}  {'Feature':<40}{RESET}")
+        print(f"  {DIM}{'─' * 48}{RESET}")
+        for key, label, icon, _ in MENU:
+            color = RED if key == "0" else CYAN
+            print(f"  {color}{BOLD}{key:<4}{RESET}  {icon}  {label}")
+        print(f"  {DIM}{'─' * 48}{RESET}")
+        print_menu_footer()
+
+        choice = get_input("Enter choice", color=YELLOW).strip()
+
+        matched = False
+        for key, label, icon, func in MENU:
+            if choice == key:
+                matched = True
+                if func is None:
+                    clear()
+                    banner()
+                    print(f"\n{GREEN}  👋 Goodbye! Thanks for using QR Generator.{RESET}")
+                    footer()
+                    sys.exit(0)
+                clear()
+                banner()
+                try:
+                    func()
+                except KeyboardInterrupt:
+                    print(f"\n{YELLOW}↩  Returning to menu…{RESET}")
+                pause()
+                break
+
+        if not matched:
+            print(f"{RED}⚠  Invalid choice '{choice}'. Enter a number from the menu.{RESET}")
+            import time; time.sleep(1)
+
+# ═════════════════════════════════════════════════════════════════
+#  ENTRY POINT
+# ═════════════════════════════════════════════════════════════════
+if __name__ == "__main__":
+    try:
+        main_menu()
+    except KeyboardInterrupt:
+        print(f"\n\n{YELLOW}⚡ Exiting. Goodbye!{RESET}")
+        footer()
+        sys.exit(0)
